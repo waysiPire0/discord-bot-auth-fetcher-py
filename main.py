@@ -7,8 +7,12 @@ import win32com.client
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.common.by import By
+import multiprocessing
 
 
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return list((a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n)))
 
 def read_file():
     file = open('resultCodes.txt','r')
@@ -17,9 +21,11 @@ def read_file():
         if line.strip():
             lines.append(line)
     file.close()
+
     return lines
 
-def append_in_text_file(code):
+def append_in_text_file(code,lock):
+    lock.acquire()
     if code in read_file():
         print("** CODE ALREADY IN FILE")
         return
@@ -29,6 +35,7 @@ def append_in_text_file(code):
         file = open('resultCodes.txt','a')
     file.write(str(code)+'\n')
     file.close()
+    lock.release()
 
 def clear_win():
     os.system('cls') if os.name == 'nt' else os.system('clear')
@@ -62,13 +69,8 @@ def get_driver(profilePath,profileName):
     driver = webdriver.Chrome(desired_capabilities = cap, options=options)
     return driver
 
-def main():
-    folder = get_folder_path()
-    app_data = os.getenv('APPDATA')
-    app_data = os.path.abspath(os.path.join(app_data, '..'))
-    profilesFolderPath =  os.path.join(app_data,'Local','Google','Chrome','User Data')  
-    files = list(os.walk(folder))[0][2]
-    for file in files:
+def oneChunkHandler(chunk,folder,profilesFolderPath,lock):
+    for file in chunk:
         profileName = get_taget_profile(os.path.join(folder,file))
         print("** FETCHING CODE FOR PROFILE -> ", profileName)
         driver = get_driver(profilesFolderPath,profileName)
@@ -94,7 +96,7 @@ def main():
             
             print("** CODE -> ", [code])
             if code:
-                append_in_text_file(code)
+                append_in_text_file(code,lock)
 
         except Exception as e:
             print(e)    
@@ -104,6 +106,23 @@ def main():
         try:driver.quit()
         except:pass
 
+def main():
+    folder = get_folder_path()
+    app_data = os.getenv('APPDATA')
+    app_data = os.path.abspath(os.path.join(app_data, '..'))
+    profilesFolderPath =  os.path.join(app_data,'Local','Google','Chrome','User Data')  
+    files = list(os.walk(folder))[0][2]
+    chunks = split(files,5)
+    processes = [None] * len(chunks)
+    lock = multiprocessing.Lock()
+    for p in range(len(processes)):
+        processes[p] = multiprocessing.Process(target=oneChunkHandler,args=(chunks[p],folder,profilesFolderPath,lock,))
+        processes[p].start()
+    
+    for p in processes:
+        p.join()
+
+    
 if __name__ == "__main__":
     print("\n BOT STARTING......")
     main()
