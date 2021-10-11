@@ -8,6 +8,10 @@ from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.common.by import By
 import multiprocessing
+from win32com.client import Dispatch 
+import requests
+import wget
+import zipfile
 
 
 def split(a, n):
@@ -15,7 +19,11 @@ def split(a, n):
     return list((a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n)))
 
 def read_file():
-    file = open('resultCodes.txt','r')
+    try:
+        file = open('resultCodes.txt','r')
+    except:
+        open('resultCodes.txt','w').close()
+        return []
     lines = []
     for line in file.readlines():
         if line.strip():
@@ -53,7 +61,36 @@ def get_taget_profile(filePath):
     targetProfile = args.split('=')[-1].replace('"','')
     return targetProfile
 
+
+
+def get_version_via_com(filename):
+    parser = Dispatch("Scripting.FileSystemObject")     
+    version = parser.GetFileVersion(filename)     
+    return version 
+
+def install_chromedriver(version_number):
+    
+    # get the latest chrome driver version number
+    url = 'https://chromedriver.storage.googleapis.com/LATEST_RELEASE'
+    response = requests.get(url)
+    version_number = response.text
+
+    # build the donwload url
+    download_url = "https://chromedriver.storage.googleapis.com/" + version_number +"/chromedriver_win32.zip"
+
+    # download the zip file using the url built above
+    latest_driver_zip = wget.download(download_url,'chromedriver.zip')
+
+    # extract the zip file
+    with zipfile.ZipFile(latest_driver_zip, 'r') as zip_ref:
+        zip_ref.extractall() # you can specify the destination folder path here
+    # delete the zip file downloaded above
+    os.remove(latest_driver_zip)
+
+
 def get_driver(profilePath,profileName):
+    
+
     print([profilePath,profileName])
     options = webdriver.ChromeOptions()
     options.add_experimental_option('w3c', False) ### added this line
@@ -124,7 +161,13 @@ def main():
 
     
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
     print("\n BOT STARTING......")
+    if not os.path.exists(os.path.join(os.getcwd(),'chromedriver.exe')):
+        path = os.path.join(os.environ["ProgramFiles"],'Google','Chrome','Application','chrome.exe') if os.path.exists(os.path.join(os.environ["ProgramFiles"],'Google','Chrome','Application','chrome.exe')) else os.path.join(os.environ["ProgramFiles(x86)"],'Google','Chrome','Application','chrome.exe')
+        version = get_version_via_com(path)
+        install_chromedriver(version)
     main()
     print("\n BOT JOB DONE \n")
     while 1:pass
